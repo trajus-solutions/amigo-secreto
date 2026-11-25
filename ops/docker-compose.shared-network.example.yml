@@ -1,0 +1,19 @@
+# Variante para quem já tem um nginx em Docker e quer que ele alcance o app pelo nome do contêiner
+# (sem publicar porta no host). Troque SUA_REDE_DOCKER pelo nome da rede do seu nginx
+# (veja com: docker network ls) e use no lugar do docker-compose.yml.
+# No nginx: set $amigo http://amigo-secreto:3000; proxy_pass $amigo;  (com resolver 127.0.0.11)
+services:
+  amigo-secreto:
+    build: ..
+    container_name: amigo-secreto
+    restart: unless-stopped
+    mem_limit: 128m
+    volumes:
+      - ../data:/data
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: SUA_REDE_DOCKER

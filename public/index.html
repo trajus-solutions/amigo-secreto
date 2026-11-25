@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Amigo Secreto da Família</title>
+<style>
+  :root {
+    --bg: #fdf6ec; --card: #ffffff; --ink: #2b2118; --muted: #7a6a5a;
+    --accent: #c0392b; --accent-ink: #fff; --ok: #1e7e4a; --warn: #a15c00; --line: #eadfce;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1d1712; --card: #2a2119; --ink: #f4eadc; --muted: #b3a190; --accent: #e4574a; --line: #3d3025; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+    font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  main { width: 100%; max-width: 440px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 22px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.07); text-align: center; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .emoji { font-size: 2.6rem; line-height: 1; margin-bottom: 8px; }
+  p { margin: .6rem 0; }
+  .muted { color: var(--muted); font-size: .92rem; }
+  select, button { width: 100%; font: inherit; border-radius: 12px; padding: 14px; margin-top: 12px; }
+  select { border: 2px solid var(--line); background: var(--bg); color: var(--ink); }
+  button { border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--ink); border: 2px solid var(--line); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .result { font-size: 2.2rem; font-weight: 800; color: var(--accent); margin: 14px 0; word-break: break-word; }
+  .warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn);
+    border-radius: 12px; padding: 12px; font-size: .92rem; font-weight: 600; }
+  .tipo { color: var(--accent); white-space: nowrap; }
+  .note { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); border-radius: 12px;
+    padding: 12px; font-size: .95rem; text-align: left; }
+  .error { color: var(--accent); font-weight: 600; min-height: 1.4em; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card" id="view"></div>
+</main>
+<script>
+const view = document.getElementById('view');
+let revealed = null; // resultado fica SÓ na memória desta aba; ao sair/recarregar, some.
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Erro inesperado');
+  return data;
+}
+
+function showMessage(emoji, title, text) {
+  view.innerHTML = `<div class="emoji">${emoji}</div><h1>${esc(title)}</h1><p class="muted">${text}</p>`;
+}
+
+function showResult(r) {
+  window.onbeforeunload = (e) => { e.preventDefault(); e.returnValue = ''; };
+  view.innerHTML = `
+    <div class="emoji">${r.tipo === 'Amigo Doce' ? '🍬' : '☕'}</div>
+    <h1>${esc(r.you)}, você está no <span class="tipo">${esc(r.tipo)}</span></h1>
+    <p class="muted">Seu amigo secreto é:</p>
+    <div class="result">${esc(r.friend)}</div>
+    ${r.note ? `<p class="note"><b>Observação:</b> ${esc(r.note)}</p>` : ''}
+    <p class="warn">Anote agora! Quando você sair ou recarregar esta página, não será possível ver de novo.</p>
+    <button id="done">Anotei, pode fechar</button>`;
+  document.getElementById('done').onclick = () => {
+    window.onbeforeunload = null; revealed = null;
+    showMessage('🤫', 'Combinado!', 'Seu resultado foi ocultado. Guarde segredo!');
+  };
+}
+
+function showPicker(pending) {
+  view.innerHTML = `
+    <div class="emoji">🎅</div>
+    <h1>Amigo Secreto da Família</h1>
+    <p class="muted">Escolha o seu nome para descobrir quem você tirou.</p>
+    <select id="who"><option value="">— selecione seu nome —</option>
+      ${pending.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+    </select>
+    <button id="go" disabled>Sortear meu amigo secreto</button>
+    <p class="error" id="err"></p>
+    <p class="muted">Cada nome só pode sortear uma vez. Escolha o seu, e não o de outra pessoa.</p>`;
+  const sel = document.getElementById('who'), go = document.getElementById('go'), err = document.getElementById('err');
+  sel.onchange = () => { go.disabled = !sel.value; err.textContent = ''; };
+  go.onclick = () => {
+    const name = sel.options[sel.selectedIndex].text;
+    view.innerHTML = `
+      <div class="emoji">🤔</div>
+      <h1>Você é ${esc(name)}?</h1>
+      <p class="muted">O resultado aparece uma única vez, só nesta tela.</p>
+      <button id="yes">Sim, sou eu — revelar</button>
+      <button class="secondary" id="no">Não, voltar</button>
+      <p class="error" id="err2"></p>`;
+    document.getElementById('no').onclick = load;
+    document.getElementById('yes').onclick = async (e) => {
+      e.target.disabled = true;
+      try {
+        revealed = await api('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ participant_id: Number(sel.value) }) });
+        showResult(revealed);
+      } catch (ex) {
+        document.getElementById('err2').textContent = ex.message;
+        e.target.disabled = false;
+      }
+    };
+  };
+}
+
+async function load() {
+  if (revealed) return showResult(revealed);
+  try {
+    const s = await api('/api/state');
+    if (s.phase !== 'open') return showMessage('⏳', 'Calma, ainda não começou', 'O sorteio ainda não foi liberado. Volte em alguns instantes.');
+    if (s.total === 0) return showMessage('🤷', 'Sem participantes ainda', 'Ninguém foi cadastrado. Confira o link com quem organizou.');
+    if (s.finished) return showMessage('🎉', 'Todos já sortearam!', 'O amigo secreto está completo. Boas festas!');
+    if (s.me) return showMessage('🤫', `${esc(s.me.name)}, você já sorteou`, 'Por segurança o resultado não pode ser consultado de novo. Se perdeu a informação, fale com quem organizou.');
+    showPicker(s.pending);
+  } catch (e) { showMessage('⚠️', 'Não foi possível carregar', esc(e.message)); }
+}
+load();
+</script>
+</body>
+</html>

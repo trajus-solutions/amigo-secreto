@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Amigo Secreto — Organização</title>
+<style>
+  :root { --bg:#f6f1ea; --card:#fff; --ink:#2b2118; --muted:#7a6a5a; --accent:#c0392b; --line:#e4d8c6; --ok:#1e7e4a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1d1712; --card:#2a2119; --ink:#f4eadc; --muted:#b3a190; --accent:#e4574a; --line:#3d3025; --ok:#4cc38a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:16px; }
+  main { max-width:640px; margin:0 auto; }
+  h1 { font-size:1.4rem; } h2 { font-size:1.05rem; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px; }
+  input, select, textarea, button { font:inherit; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  textarea { width:100%; min-height:90px; }
+  button { background:var(--accent); color:#fff; border:0; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.small { padding:4px 10px; font-size:.85rem; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .row > select { flex:1; min-width:120px; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .tag { font-size:.78rem; padding:2px 8px; border-radius:99px; border:1px solid var(--line); }
+  .tag.ok { color:var(--ok); border-color:var(--ok); }
+  .msg { min-height:1.4em; font-weight:600; } .msg.err { color:var(--accent); } .msg.good { color:var(--ok); }
+  [hidden] { display:none !important; }
+  .link { word-break:break-all; font-family:ui-monospace,monospace; background:var(--bg); padding:8px; border-radius:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎅 Amigo Secreto — Organização</h1>
+  <div id="app"></div>
+  <p class="msg" id="msg"></p>
+</main>
+<script>
+const app = document.getElementById('app'), msg = document.getElementById('msg');
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const say = (t, cls = '') => { msg.textContent = t; msg.className = 'msg ' + cls; };
+async function api(path, method = 'GET', body) {
+  const r = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : (method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+    body: method === 'POST' ? JSON.stringify(body || {}) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Erro inesperado');
+  return data;
+}
+const act = (fn) => async (...a) => { try { say(''); await fn(...a); } catch (e) { say(e.message, 'err'); } };
+
+function loginView(needsSetup) {
+  app.innerHTML = `<div class="card">
+    <h2>${needsSetup ? 'Crie a senha do organizador' : 'Entrar'}</h2>
+    <p class="muted">${needsSetup ? 'Mínimo de 8 caracteres. Só quem organiza usa esta página.' : 'Área restrita a quem organiza.'}</p>
+    <div class="row"><input type="password" id="pw" placeholder="Senha" autocomplete="${needsSetup ? 'new-password' : 'current-password'}" style="flex:1">
+    <button id="ok">${needsSetup ? 'Criar' : 'Entrar'}</button></div></div>`;
+  const submit = act(async () => {
+    await api(needsSetup ? '/api/admin/setup' : '/api/admin/login', 'POST', { password: document.getElementById('pw').value });
+    refresh();
+  });
+  document.getElementById('ok').onclick = submit;
+  document.getElementById('pw').onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+}
+
+function render(s) {
+  const link = location.origin + '/';
+  const gname = (g) => s.groups[g];
+  const opts = s.people.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(gname(p.grp))})</option>`).join('');
+  const hasKids = s.people.some((p) => p.grp === 'criancas');
+  let html = `<div class="card"><h2>Link para a família (um só, para todos)</h2><div class="link">${esc(link)}</div>
+    <p class="muted">Adultos e crianças usam o mesmo link e a mesma lista de nomes. Cada um escolhe o próprio nome e vê quem tirou,
+    uma única vez. Adulto vê "Amigo Xícara", criança vê "Amigo Doce". Cada grupo só sorteia entre si.
+    Os pais podem abrir o link e revelar pelas crianças pequenas.</p></div>`;
+  const peopleList = (g) => {
+    const list = s.people.filter((p) => p.grp === g);
+    return `<h2 style="margin-top:14px">${esc(gname(g))} — ${esc(s.tipos[g])} (${list.length})${list.length && list.length < s.minGroup ? ` <span class="tag">mínimo ${s.minGroup}</span>` : ''}</h2>
+      <ul>${list.map((p) => `<li><span>${esc(p.name)}${p.note ? `<br><span class="muted">Obs.: ${esc(p.note)}</span>` : ''}</span>
+        <span><button class="ghost small" data-move="${p.id}:${g === 'adultos' ? 'criancas' : 'adultos'}">${g === 'adultos' ? '→ crianças' : '→ adultos'}</button>
+        <button class="ghost small" data-note="${p.id}">obs.</button>
+        <button class="ghost small" data-del="${p.id}">remover</button></span></li>`).join('')
+        || '<li class="muted">Ninguém ainda.</li>'}</ul>`;
+  };
+
+  if (s.phase === 'setup') {
+    html += `<div class="card"><h2>1. Participantes (${s.people.length}/${s.max})</h2>
+      <textarea id="names" placeholder="Um nome por linha. Opcional: Nome | observação&#10;Ex.: Miguel | Esta criança não come doce. Sugestão: frutas (uva, melancia, banana etc.)"></textarea>
+      <div class="row" style="margin-top:8px"><select id="grupo">
+        ${Object.entries(s.groups).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select>
+        <button id="addNames">Adicionar ao grupo</button></div>
+      ${peopleList('adultos')}${peopleList('criancas')}
+      <p class="muted">Adultos sorteiam entre adultos e crianças entre crianças. Cada grupo precisa de ao menos ${s.minGroup} pessoas (o grupo das crianças é opcional).</p></div>
+      <div class="card"><h2>2. Quem NÃO pode tirar quem</h2>
+      <p class="muted">A regra vale nos dois sentidos (se A não tira B, B também não tira A) e só entre pessoas do mesmo grupo (ex.: irmãos).</p>
+      <div class="row"><select id="exA">${opts}</select><span>×</span><select id="exB">${opts}</select>
+      <button id="addEx" ${s.people.length < 2 ? 'disabled' : ''}>Adicionar regra</button></div>
+      <ul style="margin-top:10px">${s.exclusions.map((e) => `<li><span>${esc(e.aName)} ↔ ${esc(e.bName)}</span>
+        <button class="ghost small" data-delex="${e.a}/${e.b}">remover</button></li>`).join('') || '<li class="muted">Nenhuma regra extra (só ninguém tira a si mesmo).</li>'}</ul></div>
+      <div class="card"><h2>3. Liberar o sorteio</h2>
+      <label class="row"><input type="checkbox" id="avoid" checked> <span>Evitar troca direta (A tira B e B tira A)</span></label>
+      <p class="muted">Ao liberar, o sorteio completo é calculado e a lista fica travada. Ninguém (nem você) vê quem tirou quem até o fim.</p>
+      <button id="start" ${s.people.length < s.minGroup ? 'disabled' : ''}>Liberar sorteio</button></div>`;
+  } else {
+    html += `<div class="card"><h2>Andamento: ${s.claimed}/${s.people.length} já sortearam</h2>
+      <ul>${s.people.map((p) => `<li><span>${esc(p.name)}${hasKids ? ` <span class="muted">(${esc(gname(p.grp))})</span>` : ''}</span><span>
+        ${p.claimed_at ? `<span class="tag ok">já viu</span> <button class="ghost small" data-rel="${p.id}" title="Se a pessoa perdeu a tela">liberar de novo</button>` : '<span class="tag">pendente</span>'}</span></li>`).join('')}</ul></div>`;
+    if (s.finished) {
+      html += `<div class="card"><h2>🎉 Todos sortearam</h2>
+        <p>O arquivo de auditoria (quem tirou quem) foi gerado.</p>
+        <button id="audit">Baixar auditoria (.txt)</button>
+        <p class="muted">Guarde o arquivo e depois o app pode ser encerrado.</p></div>`;
+    } else if (s.claimed === 0) {
+      html += `<div class="card"><button class="ghost" id="reset">Voltar e editar a lista (ninguém sorteou ainda)</button></div>`;
+    }
+  }
+  html += `<div class="card"><button class="ghost" id="logout">Sair</button></div>`;
+  app.innerHTML = html;
+
+  const $ = (id) => document.getElementById(id);
+  const on = (id, fn) => $(id) && ($(id).onclick = act(fn));
+  on('addNames', async () => {
+    const r = await api('/api/admin/participants', 'POST', { names: $('names').value, grupo: $('grupo').value });
+    await refresh(); if (r.skipped.length) say('Já existiam (ignorados): ' + r.skipped.join(', '), 'err');
+  });
+  on('addEx', async () => { await api('/api/admin/exclusions', 'POST', { a: Number($('exA').value), b: Number($('exB').value) }); await refresh(); });
+  on('start', async () => {
+    if (!confirm('Liberar o sorteio? A lista fica travada.')) return;
+    const r = await api('/api/admin/start', 'POST', { avoidSwap: $('avoid').checked });
+    await refresh(); say(r.relaxed ? 'Sorteio liberado (não foi possível evitar toda troca direta com essas regras).' : 'Sorteio liberado!', 'good');
+  });
+  on('reset', async () => { await api('/api/admin/reset', 'POST'); await refresh(); });
+  on('logout', async () => { await api('/api/admin/logout', 'POST'); refresh(); });
+  on('audit', async () => { location.href = '/api/admin/audit'; });
+  app.querySelectorAll('[data-del]').forEach((b) => b.onclick = act(async () => { await api('/api/admin/participants/' + b.dataset.del, 'DELETE'); await refresh(); }));
+  app.querySelectorAll('[data-move]').forEach((b) => b.onclick = act(async () => {
+    const [pid, grupo] = b.dataset.move.split(':');
+    await api(`/api/admin/participants/${pid}/group`, 'POST', { grupo }); await refresh();
+  }));
+  app.querySelectorAll('[data-note]').forEach((b) => b.onclick = act(async () => {
+    const p = s.people.find((x) => String(x.id) === b.dataset.note);
+    const note = prompt(`Observação para quem tirar ${p.name} (deixe vazio para apagar):`, p.note || '');
+    if (note === null) return;
+    await api(`/api/admin/participants/${p.id}/note`, 'POST', { note }); await refresh();
+  }));
+  app.querySelectorAll('[data-delex]').forEach((b) => b.onclick = act(async () => { await api('/api/admin/exclusions/' + b.dataset.delex, 'DELETE'); await refresh(); }));
+  app.querySelectorAll('[data-rel]').forEach((b) => b.onclick = act(async () => {
+    if (!confirm('Liberar esta pessoa para ver o MESMO resultado de novo?')) return;
+    await api('/api/admin/release/' + b.dataset.rel, 'POST'); await refresh();
+  }));
+}
+
+async function refresh() {
+  try {
+    const me = await api('/api/admin/me');
+    if (!me.loggedIn) return loginView(me.needsSetup);
+    render(await api('/api/admin/state'));
+  } catch (e) { say(e.message, 'err'); }
+}
+refresh();
+</script>
+</body>
+</html>

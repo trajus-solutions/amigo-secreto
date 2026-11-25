@@ -1,0 +1,12 @@
+# Uso básico: docker compose up -d --build   ->   http://localhost:3000  (admin em /admin)
+# Para expor na internet, coloque um proxy HTTPS (nginx/caddy) na frente; veja README.md.
+services:
+  amigo-secreto:
+    build: .
+    container_name: amigo-secreto
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:3000:3000"   # só a própria máquina; o proxy HTTPS acessa daqui
+    volumes:
+      - ./data:/data            # banco SQLite e arquivos de auditoria

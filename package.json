@@ -1,0 +1,8 @@
+{
+  "name": "amigo-secreto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sorteio de amigo secreto da família, com link único e auditoria em .txt",
+  "scripts": { "start": "node server.js", "test": "node test.js" },
+  "engines": { "node": ">=22.13" }
+}
